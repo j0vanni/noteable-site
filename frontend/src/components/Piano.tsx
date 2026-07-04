@@ -18,7 +18,7 @@ const BLACK_OFFSETS: Array<{
 ];
 
 const START_OCTAVE = 3;
-const NUM_OCTAVES = 3;
+const NUM_OCTAVES = 1;
 
 interface KeyInfo {
   midi: number;
@@ -49,9 +49,9 @@ function buildKeyMap(): KeyInfo[] {
         isBlack: true,
       });
     });
-
-    return keys;
   }
+
+  return keys;
 }
 
 const KEY_MAP = buildKeyMap();
@@ -112,7 +112,7 @@ export default function Piano({ onNoteOn, activeNotes = [] }: PianoProps) {
           aria-label={`Note ${key.midi}`}
           style={{
             position: "absolute",
-            left: key.x,
+            left: key.x + BLACK_KEY_W / 2,
             top: 0,
             width: BLACK_KEY_W,
             height: BLACK_KEY_H,
