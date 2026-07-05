@@ -1,0 +1,151 @@
+import { useCallback, useState } from "react";
+import {
+  generateNote,
+  generateInterval,
+  generateChord,
+} from "../utils/noteGenerationUtils";
+
+export type Clef = "treble" | "bass";
+export type Mode = "single" | "interval" | "chord";
+
+export interface SessionConfig {
+  clef: Clef;
+  key: string;
+  mode: Mode;
+  bpm: number;
+  notesPerSession: number;
+}
+
+export interface NoteAttempt {
+  expected: string[];
+  played: number[];
+  correct: boolean;
+  timestamp: number;
+}
+
+export interface SessionState {
+  phase: "settings" | "playing" | "results";
+  config: SessionConfig;
+  currentNote: string[] | null;
+  history: NoteAttempt[];
+  startedAt: number | null;
+}
+
+const DEFAULT_CONFIG: SessionConfig = {
+  clef: "treble",
+  key: "C",
+  mode: "single",
+  bpm: 60,
+  notesPerSession: 20,
+};
+
+export interface UsePracticeSessionResult {
+  state: SessionState;
+  updateConfig: (partial: Partial<SessionConfig>) => void;
+  startSession: () => void;
+  handleNoteInput: (midiNote: number) => void;
+  saveAndReturn: () => Promise<void>;
+  playAgain: () => void;
+}
+
+function pickNextNote(config: SessionConfig): string[] {
+  if (config.mode === "interval")
+    return generateInterval(config.key, config.clef);
+  if (config.mode === "chord") return generateChord(config.key, config.clef);
+  return generateNote(config.key, config.clef);
+}
+
+export function UsePracticeSession(
+  onSave?: (
+    history: NoteAttempt[],
+    config: SessionConfig,
+    durationSeconds: number,
+  ) => Promise<void>,
+): UsePracticeSessionResult {
+  const [state, setState] = useState<SessionState>({
+    phase: "settings",
+    config: DEFAULT_CONFIG,
+    currentNote: null,
+    history: [],
+    startedAt: null,
+  });
+
+  const updateConfig = useCallback((partial: Partial<SessionConfig>) => {
+    setState((prev) => ({
+      ...prev,
+      config: { ...prev.config, ...partial },
+    }));
+  }, []);
+
+  const startSession = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      phase: "playing",
+      currentNote: pickNextNote(prev.config),
+      history: [],
+      startedAt: Date.now(),
+    }));
+  }, []);
+
+  const handleNoteInput = useCallback((midiNote: number) => {
+    setState((prev) => {
+      if (prev.phase !== "playing" || !prev.currentNote) return prev;
+
+      const correct = matchNote(prev.currentNote, [midiNote]);
+
+      const attempt: NoteAttempt = {
+        expected: prev.currentNote,
+        played: [midiNote],
+        correct,
+        timestamp: Date.now(),
+      };
+
+      const newHistory = [...prev.history, attempt];
+      const done = newHistory.length >= prev.config.notesPerSession;
+
+      if (done) {
+        return {
+          ...prev,
+          phase: "results",
+          currentNote: null,
+          history: newHistory,
+        };
+      }
+
+      if (!correct) {
+        return { ...prev, history: newHistory };
+      }
+
+      return {
+        ...prev,
+        currentNote: pickNextNote(prev.config),
+        history: newHistory,
+      };
+    });
+  }, []);
+
+  const saveAndReturn = useCallback(async () => {
+    if (!onSave || !state.startedAt) return;
+    const duration = (Date.now() - state.startedAt) / 1000;
+    await onSave(state.history, state.config, duration);
+  }, [onSave, state.history, state.config, state.startedAt]);
+
+  const playAgain = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      phase: "settings",
+      currentNote: null,
+      history: [],
+      startedAt: null,
+    }));
+  }, []);
+
+  return {
+    state,
+    updateConfig,
+    startSession,
+    handleNoteInput,
+    saveAndReturn,
+    playAgain,
+  };
+}
