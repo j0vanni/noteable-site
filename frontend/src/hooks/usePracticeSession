@@ -4,6 +4,7 @@ import {
   generateInterval,
   generateChord,
 } from "../utils/noteGenerationUtils";
+import { matchNote } from "../utils/noteMatchingUtils";
 
 export type Clef = "treble" | "bass";
 export type Mode = "single" | "interval" | "chord";
